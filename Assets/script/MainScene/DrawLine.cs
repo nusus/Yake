@@ -10,43 +10,58 @@ public class DrawLine : MonoBehaviour {
 
     private DrawPointState m_DrawPointState;
 
-    private ArrayList m_PointSpritePool;
-
     private float m_PointRadius;
 
     private GameObject m_LineGroup;
-	// Use this for initialization
-	void Start () {
+    // Use this for initialization
+    void Start () {
         m_DrawPointState = DrawPointState.First;
 
         m_LineGroup = GameObject.Find("lineGroup");
 
-        GameObject point = Instantiate(m_PointSpritePrefab, new Vector3(-100, -100, 0), Quaternion.identity) as GameObject;
-        //m_PointRadius = this.GetPointRadius(point);
-        m_PointRadius = 0.16f;
-        m_PointSpritePool = new ArrayList();
-        m_PointSpritePool.Add(point);
+
+        m_PointRadius = m_PointSpritePrefab.GetComponent<CircleCollider2D>().radius;
 	}
 	
 	// Update is called once per frame
 	void Update () {
         int inputType = 0;
+
+        //platform specific
+#if UNITY_EDITOR        
         if (Input.GetMouseButtonDown(0)) inputType |= 1;
-        if (1 == Input.touchCount) inputType |= 2;
+#elif UNITY_STANDALONE
+        if (Input.GetMouseButtonDown(0)) inputType |= 1;
+#elif UNITY_IPHONE
+        if (1 == Input.touchCount) inputType |= 1;
+#elif UNITY_ANDROID
+        if (1 == Input.touchCount) inputType |= 1;
+#endif
         Vector3 tmpPoint = new Vector3();
 
         switch (inputType) {
             case 0:
                 return;
             case 1:
+                //platform specific
+#if UNITY_EDITOR
                 tmpPoint = Input.mousePosition;
                 break;
-            case 2:
+#elif UNITY_STANDALONE
+                tmpPoint = Input.mousePosition;
+                break;
+#elif UNITY_IPHONE
                 tmpPoint = Input.touches[0].position;
                 break;
+#elif UNITY_ANDROID
+                tmpPoint = Input.touches[0].position;
+                break;
+#endif          
             default:
                 break;
         }
+        tmpPoint = Camera.main.ScreenToWorldPoint(tmpPoint);
+        tmpPoint.z = m_LineGroup.transform.position.z;
 
         switch (m_DrawPointState)
         {
@@ -74,9 +89,8 @@ public class DrawLine : MonoBehaviour {
             default:
                 break;
 
+
         }
-
-
 
     }
 
@@ -84,30 +98,43 @@ public class DrawLine : MonoBehaviour {
     {
         if (DrawPointState.Finished == m_DrawPointState)
         {
+#if UNITY_EDITOR
+            DebugLog.Log("first point position:" + m_FisrtPointPos.ToString());
+            DebugLog.Log("second point position:" + m_SecondPointPos.ToString());
+                
+#endif
             Vector3 lineVec3 = m_SecondPointPos - m_FisrtPointPos;
             float lineLength = lineVec3.magnitude;
-            Vector3 normalizedLineVector = lineVec3.normalized * m_PointRadius;
-            int pointNumber = Mathf.CeilToInt(lineLength / m_PointRadius);
-            int pointsToBeAdded = pointNumber - m_PointSpritePool.Count;
-            if(pointsToBeAdded <= 0)
+            float pointOffset = m_PointRadius * 2.0f;
+            Vector3 normalizedLineVector = lineVec3.normalized * pointOffset;
+            int pointNumber = Mathf.CeilToInt(lineLength / pointOffset);
+            int pointsToBeAdded = pointNumber - m_LineGroup.transform.childCount;
+
+            int index = 0;
+            if (pointsToBeAdded <= 0)
             {
-                for (int index = 0; index < pointNumber; ++index)
+                
+                foreach(Transform childTs in m_LineGroup.transform)
                 {
-                    GameObject point = (GameObject)m_PointSpritePool[index];
-                    point.transform.position = m_FisrtPointPos + index * normalizedLineVector;
+                    if (index > pointNumber) break;
+                    childTs.position = m_FisrtPointPos + index * normalizedLineVector;
+                    RestorePoint(childTs.gameObject);
+                    ++index;
                 }
             }
             else
             {
-                for(int index = 0; index < m_PointSpritePool.Count; ++ index)
+                foreach(Transform childTs in m_LineGroup.transform)
                 {
-                    GameObject point = (GameObject)m_PointSpritePool[index];
-                    point.transform.position = m_FisrtPointPos + index * normalizedLineVector;
+                    childTs.position = m_FisrtPointPos + index * normalizedLineVector;
+                    RestorePoint(childTs.gameObject);
+                    ++index;
                 }
+
                 for (int i = 0; i < pointsToBeAdded; ++i)
                 {
-                    GameObject point = GameObject.Instantiate(m_PointSpritePrefab, m_FisrtPointPos + m_PointSpritePool.Count * normalizedLineVector, Quaternion.identity) as GameObject;
-                    m_PointSpritePool.Add(point);
+                    Instantiate(m_PointSpritePrefab, m_FisrtPointPos + index * normalizedLineVector, Quaternion.identity, m_LineGroup.transform);          
+                    ++index;
                 }
             }
         }
@@ -115,12 +142,20 @@ public class DrawLine : MonoBehaviour {
 
     private void ClearPreviousPoints()
     {
-
+        foreach(Transform childTs in m_LineGroup.transform)
+        {
+            childTs.position = new Vector3(-10, -10, 0);
+        }
     }
 
     private float GetPointRadius(Object pointGameObject)
     {
         Sprite pointSprite = (Sprite)pointGameObject;
         return pointSprite.rect.width / pointSprite.pixelsPerUnit;
+    }
+
+    private void RestorePoint(GameObject point)
+    {
+        point.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
     }
 }
